@@ -35,7 +35,7 @@ namespace Tuchka.Controllers
         public async Task<IActionResult> Register([FromBody] RegisterModel model)
         {
             var userExist = await _userManager.FindByNameAsync(model.Username);
-            
+
             if (userExist != null)
                 return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User already exist!" });
 
@@ -124,7 +124,7 @@ namespace Tuchka.Controllers
                     new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
                 };
 
-                foreach(var userRole in userRoles)
+                foreach (var userRole in userRoles)
                 {
                     authClaims.Add(new Claim(ClaimTypes.Role, userRole));
                 }
@@ -138,8 +138,8 @@ namespace Tuchka.Controllers
                     claims: authClaims,
                     signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
                     );
-                
-                return Ok(new {token = new JwtSecurityTokenHandler().WriteToken(token), expiration = token.ValidTo});
+
+                return Ok(new { token = new JwtSecurityTokenHandler().WriteToken(token), expiration = token.ValidTo });
             }
 
             return Unauthorized();
@@ -157,10 +157,10 @@ namespace Tuchka.Controllers
                 return StatusCode(StatusCodes.Status400BadRequest, new Response { Status = "Error", Message = "The new password and confirm new password does not match" });
 
             var result = await _userManager.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword);
-            if(!result.Succeeded)
+            if (!result.Succeeded)
             {
                 var errors = new List<string>();
-                foreach(var error in result.Errors)
+                foreach (var error in result.Errors)
                 {
                     errors.Add(error.Description);
                 }
@@ -172,10 +172,11 @@ namespace Tuchka.Controllers
             return Ok(new Response { Status = "Success", Message = "Password successfully changed." });
         }
 
+        //Reset password for admin
         [Authorize(Roles = "Admin")]
         [HttpPost]
         [Route("reset-password-admin")]
-        public async Task<IActionResult> ResetPasswordAdmin ([FromBody] ResetPasswordAdminModel model)
+        public async Task<IActionResult> ResetPasswordAdmin([FromBody] ResetPasswordAdminModel model)
         {
             var user = await _userManager.FindByNameAsync(model.Username);
             if (user == null)
@@ -186,7 +187,7 @@ namespace Tuchka.Controllers
 
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
             var result = await _userManager.ResetPasswordAsync(user, token, model.NewPassword);
-            if(!result.Succeeded)
+            if (!result.Succeeded)
             {
 
                 var errors = new List<string>();
@@ -201,6 +202,51 @@ namespace Tuchka.Controllers
             return Ok(new Response { Status = "Success", Message = "Password successfully reseted." });
         }
 
+
+        //reset password for user
+        [HttpPost]
+        [Route("reset-password-token")]
+        public async Task<IActionResult> ResetPasswordToken([FromBody] ResetPasswordTokenModel model)
+        {
+            var user = await _userManager.FindByNameAsync(model.Username);
+            if (user == null)
+                return StatusCode(StatusCodes.Status404NotFound, new Response { Status = "Error", Message = "User does not exists!" });
+
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            //Bad pratice, best practice send token to user email and generate url
+
+            return Ok(new { token = token });
+        }
+
+        [HttpPost]
+        [Route("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordModel model)
+        {
+            var user = await _userManager.FindByNameAsync(model.Username);
+            if (user == null)
+                return StatusCode(StatusCodes.Status404NotFound, new Response { Status = "Error", Message = "User does not exist" });
+
+            if (string.Compare(model.NewPassword, model.ConfirmNewPassword) != 0)
+                return StatusCode(StatusCodes.Status400BadRequest, new Response { Status = "Error", Message = "The new password and confirm new password does not match" });
+
+            if (string.IsNullOrEmpty(model.Token))
+                return StatusCode(StatusCodes.Status400BadRequest, new Response { Status = "Error", Message = "Invalid token!" });
+
+            var result = await _userManager.ResetPasswordAsync(user, model.Token, model.NewPassword);
+            if (!result.Succeeded)
+            {
+                var errors = new List<string>();
+
+                foreach (var error in result.Errors)
+                {
+                    errors.Add(error.Description);
+                }
+
+                return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = string.Join(", ", errors) });
+            }
+
+            return Ok(new Response { Status = "Success", Message = "Password successfully reseted." });
+        }
 
     }
 }
